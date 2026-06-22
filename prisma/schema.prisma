@@ -1,0 +1,143 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model Group {
+  id                             String        @id
+  name                           String
+  passcode                       String?
+  ownerId                        String        @db.Uuid
+  Profile_Group_ownerIdToProfile Profile       @relation("Group_ownerIdToProfile", fields: [ownerId], references: [id])
+  Transaction                    Transaction[]
+  Profile_groupMembers           Profile[]     @relation("groupMembers")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model Profile {
+  id                           String               @id @db.Uuid
+  name                         String?
+  Group_Group_ownerIdToProfile Group[]              @relation("Group_ownerIdToProfile")
+  Transaction                  Transaction[]
+  TransactionPurpose           TransactionPurpose[]
+  TransactionSource            TransactionSource[]
+  RecurringRule                RecurringRule[]
+  Group_groupMembers           Group[]              @relation("groupMembers")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model Transaction {
+  id                                                      String              @id
+  type                                                    TransactionType
+  category                                                TransactionCategory
+  amount                                                  Float
+  description                                             String?
+  createdAt                                               DateTime            @default(now())
+  // When the money actually moved. Defaults to createdAt; user-editable.
+  occurredAt                                              DateTime            @default(now())
+  // Auto-generated entries (from a RecurringRule) start unconfirmed until the
+  // user marks them as actually happened. Manual entries are confirmed.
+  confirmed                                               Boolean             @default(true)
+  fromId                                                  String?
+  groupId                                                 String?
+  toId                                                    String?
+  purposeId                                               String?
+  recurringId                                             String?
+  authorId                                                String              @db.Uuid
+  Profile                                                 Profile             @relation(fields: [authorId], references: [id])
+  TransactionSource_Transaction_fromIdToTransactionSource TransactionSource?  @relation("Transaction_fromIdToTransactionSource", fields: [fromId], references: [id])
+  Group                                                   Group?              @relation(fields: [groupId], references: [id])
+  TransactionPurpose                                      TransactionPurpose? @relation(fields: [purposeId], references: [id])
+  TransactionSource_Transaction_toIdToTransactionSource   TransactionSource?  @relation("Transaction_toIdToTransactionSource", fields: [toId], references: [id])
+  RecurringRule                                           RecurringRule?      @relation(fields: [recurringId], references: [id])
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model TransactionPurpose {
+  id            String              @id
+  name          String
+  ownerId       String              @db.Uuid
+  // Quick-log config. A purpose with an `icon` shows as a tappable tile;
+  // purposes auto-created from transactions leave these null and stay
+  // available only in the picker.
+  icon          String?
+  defaultAmount Float?
+  category      TransactionCategory @default(NULL)
+  sortOrder     Int                 @default(0)
+  Transaction   Transaction[]
+  Profile       Profile             @relation(fields: [ownerId], references: [id])
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+/// A "fund": a real place money lives — bank account, e-wallet, cash. Selecting
+/// one on every transaction is what makes balances trustworthy.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model TransactionSource {
+  id                                                String          @id
+  name                                              String
+  type                                              SourceType      @default(BANK)
+  // Cached running balance; kept in sync as transactions are added/edited.
+  balance                                           Float           @default(0)
+  // Optional UI hint, e.g. last 4 digits "•• 4821".
+  hint                                              String?
+  ownerId                                           String          @db.Uuid
+  Profile                                           Profile         @relation(fields: [ownerId], references: [id])
+  RecurringRule                                     RecurringRule[]
+  Transaction_Transaction_fromIdToTransactionSource Transaction[]   @relation("Transaction_fromIdToTransactionSource")
+  Transaction_Transaction_toIdToTransactionSource   Transaction[]   @relation("Transaction_toIdToTransactionSource")
+}
+
+/// A user-defined periodic transaction (salary, rent, subscriptions). A
+/// scheduler materializes a Transaction at each occurrence; that generated
+/// Transaction starts `confirmed = false` until the user marks it happened.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model RecurringRule {
+  id          String              @id
+  name        String
+  type        TransactionType
+  category    TransactionCategory @default(NULL)
+  amount      Float
+  // Cadence: anchor describes the rule, dayValue parameterizes it.
+  // e.g. DAY_OF_MONTH + 1 = "1st", SECOND_TO_LAST_DAY = "2nd-to-last day".
+  anchor      RecurrenceAnchor
+  dayValue    Int?
+  nextRunAt   DateTime
+  active      Boolean             @default(true)
+  sourceId    String?
+  purposeId   String?
+  ownerId     String              @db.Uuid
+  createdAt   DateTime            @default(now())
+  Profile     Profile             @relation(fields: [ownerId], references: [id])
+  TransactionSource TransactionSource? @relation(fields: [sourceId], references: [id])
+  Transaction Transaction[]
+}
+
+enum SourceType {
+  BANK
+  EWALLET
+  CASH
+}
+
+enum RecurrenceAnchor {
+  DAY_OF_MONTH
+  SECOND_TO_LAST_DAY
+  LAST_DAY
+  WEEKLY
+}
+
+enum TransactionCategory {
+  ESSENTIAL
+  INCIDENTAL
+  NULL
+}
+
+enum TransactionType {
+  INCOME
+  OUTCOME
+  TRANSFER
+}
