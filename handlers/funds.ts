@@ -20,8 +20,9 @@ type Result<T> =
 
 export const listFunds = async () => {
   const ownerId = await requireUserId();
+  // Personal funds only — group "pool" funds (groupId set) are managed per group.
   return prisma.transactionSource.findMany({
-    where: { ownerId },
+    where: { ownerId, groupId: null },
     orderBy: { name: "asc" },
   });
 };

@@ -18,9 +18,15 @@ const TILE =
 function QuickLogGrid({
   funds,
   purposes,
+  groupId,
+  groupFund,
 }: {
   funds: FundOption[];
   purposes: QuickLogPurpose[];
+  /** when set, quick-logged transactions go into this shared group */
+  groupId?: string;
+  /** the group's shared pool fund (group mode) */
+  groupFund?: FundOption;
 }) {
   const [editing, setEditing] = React.useState(false);
   const empty = purposes.length === 0;
@@ -71,6 +77,8 @@ function QuickLogGrid({
               <TransactionDialog
                 key={p.id}
                 funds={funds}
+                groupId={groupId}
+                groupFund={groupFund}
                 mode="quick"
                 title={p.name}
                 defaults={{

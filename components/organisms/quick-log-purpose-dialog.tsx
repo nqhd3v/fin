@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { Trash } from "@phosphor-icons/react";
 
 import { Button } from "@/components/atoms/button";
+import { ConfirmPopover } from "@/components/molecules/confirm-popover";
 import {
   Dialog,
   DialogContent,
@@ -92,7 +93,6 @@ function QuickLogPurposeDialog({ trigger, purpose }: Props) {
 
   async function onDelete() {
     if (!purpose) return;
-    if (!confirm(`Remove "${purpose.name}" from quick log?`)) return;
     setDeleting(true);
     const res = await deletePurpose(purpose.id);
     setDeleting(false);
@@ -158,16 +158,22 @@ function QuickLogPurposeDialog({ trigger, purpose }: Props) {
 
               <DialogFooter className="justify-between">
                 {isEdit ? (
-                  <Button
-                    type="button"
-                    variant="destructive"
-                    size="sm"
-                    onClick={onDelete}
-                    disabled={deleting}
-                  >
-                    <Trash />
-                    Remove
-                  </Button>
+                  <ConfirmPopover
+                    message={`Remove "${purpose!.name}" from quick log?`}
+                    confirmLabel="Remove"
+                    onConfirm={onDelete}
+                    trigger={
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="sm"
+                        disabled={deleting}
+                      >
+                        <Trash />
+                        Remove
+                      </Button>
+                    }
+                  />
                 ) : (
                   <span />
                 )}

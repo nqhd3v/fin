@@ -1,18 +1,17 @@
-import { User } from "@phosphor-icons/react/dist/ssr";
+import { getMyProfile } from "@/handlers/profile";
+import { ProfileCard } from "@/components/organisms/profile-card";
 
-import { UnderConstruction } from "@/components/organisms/under-construction";
+export default async function ProfilePage() {
+  const profile = await getMyProfile();
 
-export default function ProfilePage() {
   return (
     <>
       <header className="flex items-center border-b border-foreground/10 px-4 py-3">
         <h1 className="font-heading text-sm font-medium">Profile</h1>
       </header>
-      <UnderConstruction
-        icon={User}
-        title="Profile"
-        description="Account settings, preferences, and sign-out will live here."
-      />
+      <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6 px-4 py-6">
+        <ProfileCard profile={profile} />
+      </main>
     </>
   );
 }

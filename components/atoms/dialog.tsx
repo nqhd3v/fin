@@ -58,15 +58,20 @@ function DialogContent({
         data-slot="dialog-content"
         onInteractOutside={(e) => {
           // Select/Popover/Calendar content is portaled to <body>, so closing a
-          // dropdown reads as a click-away and would close the dialog. Ignore
-          // interactions that originate from those poppers.
+          // dropdown reads as a click-away on the dialog. Two cases to ignore:
+          // 1. the interaction lands on a portaled popper, or
+          // 2. a dropdown/popover is currently open — the click is meant to
+          //    dismiss *it*, not the dialog (e.g. clicking empty space).
           const target = e.target as Element | null;
-          if (
-            target?.closest(
-              "[data-radix-popper-content-wrapper],[data-slot='select-content'],[data-slot='popover-content']",
-            )
-          ) {
+          const onPopper = target?.closest(
+            "[data-radix-popper-content-wrapper],[data-slot='select-content'],[data-slot='popover-content']",
+          );
+          const popperOpen = document.querySelector(
+            "[data-slot='select-content'][data-state='open'],[data-slot='popover-content'][data-state='open'],[data-radix-popper-content-wrapper]",
+          );
+          if (onPopper || popperOpen) {
             e.preventDefault();
+            return;
           }
           onInteractOutside?.(e);
         }}

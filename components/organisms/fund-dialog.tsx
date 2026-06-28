@@ -21,6 +21,7 @@ import {
   FormInput,
   FormSegmented,
 } from "@/components/molecules/form";
+import { ConfirmPopover } from "@/components/molecules/confirm-popover";
 import { createFund, deleteFund, updateFund } from "@/handlers/funds";
 
 const TYPES = ["BANK", "EWALLET", "CASH"] as const;
@@ -90,7 +91,6 @@ function FundDialog({ trigger, fund }: Props) {
 
   async function onDelete() {
     if (!fund) return;
-    if (!confirm(`Delete "${fund.name}"? This cannot be undone.`)) return;
     setDeleting(true);
     const res = await deleteFund(fund.id);
     setDeleting(false);
@@ -141,16 +141,22 @@ function FundDialog({ trigger, fund }: Props) {
 
               <DialogFooter className="justify-between">
                 {isEdit ? (
-                  <Button
-                    type="button"
-                    variant="destructive"
-                    size="sm"
-                    onClick={onDelete}
-                    disabled={deleting}
-                  >
-                    <Trash />
-                    Delete
-                  </Button>
+                  <ConfirmPopover
+                    message={`Delete "${fund!.name}"? This cannot be undone.`}
+                    confirmLabel="Delete"
+                    onConfirm={onDelete}
+                    trigger={
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="sm"
+                        disabled={deleting}
+                      >
+                        <Trash />
+                        Delete
+                      </Button>
+                    }
+                  />
                 ) : (
                   <span />
                 )}

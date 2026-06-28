@@ -12,9 +12,14 @@ model Group {
   id                             String        @id
   name                           String
   passcode                       String?
+  // Shareable invite token — joining via this link skips the passcode.
+  inviteToken                    String?       @unique
+  // Set by an admin to block a group; shown to members. Null = active.
+  blockedReason                  String?
   ownerId                        String        @db.Uuid
   Profile_Group_ownerIdToProfile Profile       @relation("Group_ownerIdToProfile", fields: [ownerId], references: [id])
   Transaction                    Transaction[]
+  TransactionSource              TransactionSource[]
   Profile_groupMembers           Profile[]     @relation("groupMembers")
 }
 
@@ -22,12 +27,14 @@ model Group {
 model Profile {
   id                           String               @id @db.Uuid
   name                         String?
+  role                         Role                 @default(USER)
   Group_Group_ownerIdToProfile Group[]              @relation("Group_ownerIdToProfile")
   Transaction                  Transaction[]
   TransactionPurpose           TransactionPurpose[]
   TransactionSource            TransactionSource[]
   RecurringRule                RecurringRule[]
   Group_groupMembers           Group[]              @relation("groupMembers")
+  TransactionSplit             TransactionSplit[]
 }
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
@@ -48,6 +55,12 @@ model Transaction {
   toId                                                    String?
   purposeId                                               String?
   recurringId                                             String?
+  // Group reimbursement (pool → member): the recipient member, plus whether
+  // they've claimed it into a personal fund. PENDING/ACCEPTED/REJECTED; null
+  // for non-reimbursement transactions. The pool is debited at creation either
+  // way; claiming only affects the payee's own fund.
+  payeeId                                                 String?             @db.Uuid
+  reimbursementStatus                                     String?
   authorId                                                String              @db.Uuid
   Profile                                                 Profile             @relation(fields: [authorId], references: [id])
   TransactionSource_Transaction_fromIdToTransactionSource TransactionSource?  @relation("Transaction_fromIdToTransactionSource", fields: [fromId], references: [id])
@@ -55,6 +68,23 @@ model Transaction {
   TransactionPurpose                                      TransactionPurpose? @relation(fields: [purposeId], references: [id])
   TransactionSource_Transaction_toIdToTransactionSource   TransactionSource?  @relation("Transaction_toIdToTransactionSource", fields: [toId], references: [id])
   RecurringRule                                           RecurringRule?      @relation(fields: [recurringId], references: [id])
+  // Group spends: per-member share of this spend (equal or custom amounts).
+  // Sum of split amounts == the transaction amount. Empty on non-group / income.
+  TransactionSplit                                        TransactionSplit[]
+}
+
+/// Per-member share of a group OUTCOME — how the spend is attributed across the
+/// members who used it. Equal split = even shares; custom = user-entered amounts
+/// (which must sum to the transaction amount). Drives per-member analytics.
+model TransactionSplit {
+  id            String      @id
+  transactionId String
+  profileId     String      @db.Uuid
+  amount        Float
+  Transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  Profile       Profile     @relation(fields: [profileId], references: [id])
+
+  @@unique([transactionId, profileId])
 }
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
@@ -86,6 +116,10 @@ model TransactionSource {
   // Optional UI hint, e.g. last 4 digits "•• 4821".
   hint                                              String?
   ownerId                                           String          @db.Uuid
+  // When set, this is a shared group "pool" fund (one per group) instead of a
+  // personal fund. All members contribute to / spend from it.
+  groupId                                           String?
+  Group                                             Group?          @relation(fields: [groupId], references: [id])
   Profile                                           Profile         @relation(fields: [ownerId], references: [id])
   RecurringRule                                     RecurringRule[]
   Transaction_Transaction_fromIdToTransactionSource Transaction[]   @relation("Transaction_fromIdToTransactionSource")
@@ -115,6 +149,11 @@ model RecurringRule {
   Profile     Profile             @relation(fields: [ownerId], references: [id])
   TransactionSource TransactionSource? @relation(fields: [sourceId], references: [id])
   Transaction Transaction[]
+}
+
+enum Role {
+  USER
+  ADMIN
 }
 
 enum SourceType {

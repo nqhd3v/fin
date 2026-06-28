@@ -305,6 +305,74 @@ function FormSegmented<T extends FieldValues = FieldValues>({
   )
 }
 
+type FormCheckboxGroupProps<T extends FieldValues> = {
+  name: Path<T>
+  label: string
+  options: Option[]
+  className?: string
+}
+
+/**
+ * Multi-select toggle chips bound to the form. Value is a string[] of the
+ * selected option values. Tap a chip to add/remove.
+ */
+function FormCheckboxGroup<T extends FieldValues = FieldValues>({
+  name,
+  label,
+  options,
+  className,
+}: FormCheckboxGroupProps<T>) {
+  const { control } = useFormContext<T>()
+  return (
+    <Controller
+      control={control}
+      name={name}
+      render={({ field, fieldState }) => {
+        const value: string[] = Array.isArray(field.value) ? field.value : []
+        const toggle = (v: string) =>
+          field.onChange(
+            value.includes(v) ? value.filter((x) => x !== v) : [...value, v],
+          )
+        const allSelected = options.length > 0 && value.length === options.length
+        return (
+          <FieldShell
+            label={label}
+            error={fieldState.error?.message}
+            className={className}
+          >
+            <div className="flex flex-wrap gap-1.5">
+              <button
+                type="button"
+                aria-pressed={allSelected}
+                onClick={() =>
+                  field.onChange(allSelected ? [] : options.map((o) => o.value))
+                }
+                className="border border-input px-2 py-1 text-[11px] transition-colors hover:bg-muted aria-pressed:bg-primary aria-pressed:text-primary-foreground aria-pressed:border-primary"
+              >
+                All
+              </button>
+              {options.map((o) => {
+                const on = value.includes(o.value)
+                return (
+                  <button
+                    key={o.value}
+                    type="button"
+                    aria-pressed={on}
+                    onClick={() => toggle(o.value)}
+                    className="border border-input px-2 py-1 text-[11px] transition-colors hover:bg-muted aria-pressed:bg-primary aria-pressed:text-primary-foreground aria-pressed:border-primary"
+                  >
+                    {o.label}
+                  </button>
+                )
+              })}
+            </div>
+          </FieldShell>
+        )
+      }}
+    />
+  )
+}
+
 export {
   Form,
   FormInput,
@@ -313,5 +381,6 @@ export {
   FormCombobox,
   FormDateTime,
   FormSegmented,
+  FormCheckboxGroup,
   useFormContext,
 }
