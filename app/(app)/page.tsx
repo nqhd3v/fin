@@ -5,6 +5,7 @@ import { FundsCard } from "@/components/organisms/funds-card";
 import { QuickLogGrid } from "@/components/organisms/quick-log-grid";
 import { RecentTransactions } from "@/components/organisms/recent-transactions";
 import { RecurringCard } from "@/components/organisms/recurring-card";
+import { ScanInvoice } from "@/components/organisms/scan-invoice";
 import { SpendSummary } from "@/components/organisms/spend-summary";
 import { TransactionDialog } from "@/components/organisms/transaction-dialog";
 import { listFunds } from "@/handlers/funds";
@@ -73,6 +74,7 @@ export default async function Home() {
             <Sparkle />
             Summary
           </Button>
+          <ScanInvoice funds={funds} purposes={purposes} />
           <TransactionDialog
             funds={funds}
             purposes={purposes}

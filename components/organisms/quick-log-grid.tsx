@@ -9,6 +9,7 @@ import {
   type FundOption,
 } from "@/components/organisms/transaction-dialog";
 import { QuickLogPurposeDialog } from "@/components/organisms/quick-log-purpose-dialog";
+import { ScanInvoice } from "@/components/organisms/scan-invoice";
 import { quickIcon } from "@/lib/quick-icons";
 import type { QuickLogPurpose } from "@/handlers/purposes";
 
@@ -103,6 +104,15 @@ function QuickLogGrid({
                   <span className="text-[10px] leading-none">Add</span>
                 </button>
               }
+            />
+          ) : null}
+
+          {/* Scan a receipt into a prefilled entry (personal mode only). */}
+          {!editing && !groupFund ? (
+            <ScanInvoice
+              funds={funds}
+              purposes={purposes.map((p) => p.name)}
+              variant="tile"
             />
           ) : null}
         </div>

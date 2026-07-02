@@ -31,6 +31,8 @@ export interface ICreateTransactionPayload {
   /** group spend: explicit per-member amounts (custom split). Takes precedence
    *  over participantIds. Must sum to `amount`. */
   splits?: { profileId: string; amount: number }[];
+  /** storage path of the receipt image this entry was scanned from, if any. */
+  receiptPath?: string | null;
 }
 
 export const createTransaction = async (
@@ -159,6 +161,11 @@ export const createTransaction = async (
           confirmed: true,
           purposeId,
           groupId: payload.groupId ?? null,
+          // Only keep a receipt path the caller actually owns.
+          receiptPath:
+            payload.receiptPath && payload.receiptPath.startsWith(`${ownerId}/`)
+              ? payload.receiptPath
+              : null,
           // money leaves `fromId`, lands in `toId`
           fromId: isOutcome || isTransfer ? payload.fundId : null,
           toId: isIncome ? payload.fundId : isTransfer ? payload.toFundId : null,
@@ -221,6 +228,7 @@ export type RecentTransaction = {
   purposeName: string | null;
   fromName: string | null;
   toName: string | null;
+  receiptPath: string | null;
 };
 
 export const listRecentTransactions = async (
@@ -237,6 +245,7 @@ export const listRecentTransactions = async (
       amount: true,
       description: true,
       occurredAt: true,
+      receiptPath: true,
       TransactionPurpose: { select: { name: true } },
       TransactionSource_Transaction_fromIdToTransactionSource: {
         select: { name: true },
@@ -255,6 +264,7 @@ export const listRecentTransactions = async (
     purposeName: r.TransactionPurpose?.name ?? null,
     fromName: r.TransactionSource_Transaction_fromIdToTransactionSource?.name ?? null,
     toName: r.TransactionSource_Transaction_toIdToTransactionSource?.name ?? null,
+    receiptPath: r.receiptPath,
   }));
 };
 

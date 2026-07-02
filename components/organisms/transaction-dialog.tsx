@@ -101,10 +101,18 @@ type Defaults = {
   description?: string;
   purpose?: string;
   category?: string;
+  /** prefill the "When" field (e.g. the date read off a scanned invoice) */
+  at?: Date;
+  /** storage path of a scanned receipt to attach to the saved transaction */
+  receiptPath?: string;
 };
 
 type Props = {
-  trigger: React.ReactNode;
+  /** omit when driving the dialog externally via `open`/`onOpenChange` */
+  trigger?: React.ReactNode;
+  /** controlled open state — pair with `onOpenChange`. Falls back to internal. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
   funds: FundOption[];
   purposes?: string[];
   /** quick = outcome only, no type/category/purpose/date. full = everything. */
@@ -121,6 +129,8 @@ type Props = {
 
 function TransactionDialog({
   trigger,
+  open: openProp,
+  onOpenChange: onOpenChangeProp,
   funds,
   purposes = [],
   mode = "full",
@@ -131,7 +141,17 @@ function TransactionDialog({
   groupMembers = [],
 }: Props) {
   const router = useRouter();
-  const [open, setOpen] = React.useState(false);
+  const [openState, setOpenState] = React.useState(false);
+  // Controlled when an `open` prop is supplied (scan flow), else self-managed.
+  const isControlled = openProp !== undefined;
+  const open = isControlled ? openProp : openState;
+  const setOpen = React.useCallback(
+    (next: boolean) => {
+      if (!isControlled) setOpenState(next);
+      onOpenChangeProp?.(next);
+    },
+    [isControlled, onOpenChangeProp],
+  );
 
   // Custom per-member split (group external spend). Kept in local state since
   // the member rows are dynamic; only `splitMode` lives in the form (to gate
@@ -194,7 +214,7 @@ function TransactionDialog({
     payeeId: EXTERNAL,
     // Default: everyone used it.
     participantIds: groupMembers.map((m) => m.id),
-    at: new Date(),
+    at: defaults?.at ?? new Date(),
   };
 
   async function onSubmit(values: TxnValues) {
@@ -241,6 +261,7 @@ function TransactionDialog({
           ? (values.participantIds as string[])
           : undefined,
       splits: useCustom ? customShares : undefined,
+      receiptPath: defaults?.receiptPath ?? null,
     });
     if (!res.ok) {
       toast.warning(res.errorMessage);
@@ -253,7 +274,7 @@ function TransactionDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogTrigger asChild>{trigger}</DialogTrigger>
+      {trigger ? <DialogTrigger asChild>{trigger}</DialogTrigger> : null}
       <DialogContent>
         <DialogHeader>
           <DialogTitle>

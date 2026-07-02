@@ -61,6 +61,9 @@ model Transaction {
   // way; claiming only affects the payee's own fund.
   payeeId                                                 String?             @db.Uuid
   reimbursementStatus                                     String?
+  // Storage path of the receipt/invoice image this entry was scanned from
+  // (bucket "receipts", key "<userId>/<uuid>.<ext>"). Null = entered by hand.
+  receiptPath                                             String?
   authorId                                                String              @db.Uuid
   Profile                                                 Profile             @relation(fields: [authorId], references: [id])
   TransactionSource_Transaction_fromIdToTransactionSource TransactionSource?  @relation("Transaction_fromIdToTransactionSource", fields: [fromId], references: [id])

@@ -89,3 +89,30 @@ CREATE POLICY "Group owner all" ON public."Group"
   FOR ALL TO authenticated
   USING (auth.uid() = "ownerId")
   WITH CHECK (auth.uid() = "ownerId");
+
+-- ---------------------------------------------------------------------------
+-- Storage: receipt/invoice images (the "Scan invoice" feature).
+--
+-- Private bucket. Objects are keyed "<userId>/<uuid>.<ext>"; each user can only
+-- touch objects in their own top-level folder. The server (Prisma role) reads
+-- them via the Supabase client using the caller's session, so these policies
+-- also gate the parse/sign server actions. Idempotent.
+-- ---------------------------------------------------------------------------
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('receipts', 'receipts', false)
+ON CONFLICT (id) DO NOTHING;
+
+DROP POLICY IF EXISTS "receipts own read" ON storage.objects;
+CREATE POLICY "receipts own read" ON storage.objects
+  FOR SELECT TO authenticated
+  USING (bucket_id = 'receipts' AND (storage.foldername(name))[1] = auth.uid()::text);
+
+DROP POLICY IF EXISTS "receipts own insert" ON storage.objects;
+CREATE POLICY "receipts own insert" ON storage.objects
+  FOR INSERT TO authenticated
+  WITH CHECK (bucket_id = 'receipts' AND (storage.foldername(name))[1] = auth.uid()::text);
+
+DROP POLICY IF EXISTS "receipts own delete" ON storage.objects;
+CREATE POLICY "receipts own delete" ON storage.objects
+  FOR DELETE TO authenticated
+  USING (bucket_id = 'receipts' AND (storage.foldername(name))[1] = auth.uid()::text);
