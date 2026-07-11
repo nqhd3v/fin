@@ -2,6 +2,12 @@ import { ChartBar } from "@phosphor-icons/react/dist/ssr";
 
 import { UnderConstruction } from "@/components/organisms/under-construction";
 
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "insights",
+};
+
 export default function InsightsPage() {
   return (
     <>

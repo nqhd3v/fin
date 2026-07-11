@@ -16,7 +16,13 @@ import {
 import { Form, FormInput } from "@/components/molecules/form";
 import { createAccount } from "@/handlers/auth";
 import { toast } from "sonner";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+
+/** Only allow relative in-app paths as a post-auth redirect (no open redirect). */
+function safeNext(next: string | null): string {
+  if (next && next.startsWith("/") && !next.startsWith("//")) return next;
+  return "/";
+}
 
 const registerSchema = yup.object({
   displayName: yup
@@ -44,6 +50,10 @@ function RegisterForm({
   ...props
 }: React.ComponentProps<typeof Card>) {
   const router = useRouter();
+  const next = safeNext(useSearchParams().get("next"));
+  // Preserve the join intent across email-confirm → sign in.
+  const loginHref =
+    next === "/" ? "/login" : `/login?next=${encodeURIComponent(next)}`;
   const handleSubmit = async ({
     email,
     password,
@@ -59,7 +69,7 @@ function RegisterForm({
       return;
     }
     toast.success("an email will be sent at the moment! check & confirm that!");
-    setTimeout(() => router.push("/login"), 5000);
+    setTimeout(() => router.push(loginHref), 5000);
   };
 
   return (
@@ -117,7 +127,7 @@ function RegisterForm({
               <p className="text-center text-xs text-muted-foreground">
                 Already have an account?{" "}
                 <Link
-                  href="/login"
+                  href={loginHref}
                   className="text-foreground underline-offset-4 hover:underline"
                 >
                   Sign in

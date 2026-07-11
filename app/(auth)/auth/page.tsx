@@ -12,6 +12,12 @@ function safeNext(next?: string): string {
   return "/";
 }
 
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "auth",
+};
+
 export default async function AuthPage({
   searchParams,
 }: {

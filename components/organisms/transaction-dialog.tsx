@@ -28,7 +28,7 @@ import {
 } from "@/components/molecules/form";
 import { formatCurrency, formatNumber } from "@/lib/format";
 import { createTransaction } from "@/handlers/transactions";
-import { createReimbursement } from "@/handlers/groups";
+import { addGuest, createReimbursement } from "@/handlers/groups";
 import {
   TransactionType,
   TransactionCategory,
@@ -125,6 +125,8 @@ type Props = {
   groupFund?: FundOption;
   /** group members, enabling "pay to a member" (reimbursement) on spends */
   groupMembers?: { id: string; name: string | null }[];
+  /** unclaimed temp members (guests) — selectable in "Used by" / custom split */
+  groupGuests?: { id: string; name: string }[];
 };
 
 function TransactionDialog({
@@ -139,6 +141,7 @@ function TransactionDialog({
   groupId,
   groupFund,
   groupMembers = [],
+  groupGuests = [],
 }: Props) {
   const router = useRouter();
   const [openState, setOpenState] = React.useState(false);
@@ -158,24 +161,61 @@ function TransactionDialog({
   // amount validation). Reset whenever the dialog closes.
   const [custom, setCustom] = React.useState<Record<string, string>>({});
   const [vat, setVat] = React.useState("");
+  // Inline "add temp member" field.
+  const [guestName, setGuestName] = React.useState("");
+  const [addingGuest, setAddingGuest] = React.useState(false);
   function onOpenChange(next: boolean) {
     setOpen(next);
     if (!next) {
       setCustom({});
       setVat("");
+      setGuestName("");
     }
   }
 
-  // base per member + VAT split evenly across members who have an amount.
-  const baseRows = groupMembers
-    .map((m) => ({ id: m.id, name: m.name, base: num(custom[m.id] ?? "") }))
+  async function onAddGuest() {
+    const name = guestName.trim();
+    if (!name || !groupId) return;
+    setAddingGuest(true);
+    const res = await addGuest(groupId, name);
+    setAddingGuest(false);
+    if (!res.ok) {
+      toast.warning(res.errorMessage);
+      return;
+    }
+    setGuestName("");
+    // Re-fetch so the new guest flows back in via props.
+    router.refresh();
+  }
+
+  // Everyone a spend can be split across: real members + temp members (guests).
+  const guestIdSet = React.useMemo(
+    () => new Set(groupGuests.map((g) => g.id)),
+    [groupGuests],
+  );
+  const splitPeople = [
+    ...groupMembers.map((m) => ({
+      id: m.id,
+      name: m.name ?? "Unnamed",
+      kind: "member" as const,
+    })),
+    ...groupGuests.map((g) => ({
+      id: g.id,
+      name: g.name,
+      kind: "guest" as const,
+    })),
+  ];
+
+  // base per person + VAT split evenly across people who have an amount.
+  const baseRows = splitPeople
+    .map((p) => ({ ...p, base: num(custom[p.id] ?? "") }))
     .filter((r) => r.base > 0);
   const baseSum = baseRows.reduce((a, r) => a + r.base, 0);
   const vatNum = num(vat);
   const vatEach = baseRows.length > 0 ? vatNum / baseRows.length : 0;
   const customTotal = Math.round(baseSum + vatNum);
   const customShares = baseRows.map((r) => ({
-    profileId: r.id,
+    ...(r.kind === "guest" ? { guestId: r.id } : { profileId: r.id }),
     amount: Math.round(r.base + vatEach),
   }));
   if (customShares.length > 0) {
@@ -246,6 +286,10 @@ function TransactionDialog({
       return;
     }
 
+    // Even split: separate picked real members from picked temp members.
+    const picked = (values.participantIds as string[]) ?? [];
+    const evenSplit = isGroupOutcome && !isMemberPayee && !useCustom;
+
     const res = await createTransaction({
       type: values.type as TransactionType,
       amount: useCustom ? customTotal : values.amount ?? 0,
@@ -256,10 +300,12 @@ function TransactionDialog({
       purposeName: values.purpose || null,
       occurredAt: values.at,
       groupId: groupId ?? null,
-      participantIds:
-        isGroupOutcome && !isMemberPayee && !useCustom
-          ? (values.participantIds as string[])
-          : undefined,
+      participantIds: evenSplit
+        ? picked.filter((id) => !guestIdSet.has(id))
+        : undefined,
+      guestParticipantIds: evenSplit
+        ? picked.filter((id) => guestIdSet.has(id))
+        : undefined,
       splits: useCustom ? customShares : undefined,
       receiptPath: defaults?.receiptPath ?? null,
     });
@@ -372,39 +418,52 @@ function TransactionDialog({
                           <FormCheckboxGroup<TxnValues>
                             name="participantIds"
                             label="Used by"
-                            options={groupMembers.map((m) => ({
-                              value: m.id,
-                              label: m.name ?? "Unnamed",
+                            options={splitPeople.map((p) => ({
+                              value: p.id,
+                              label:
+                                p.kind === "guest" ? `${p.name} (temp)` : p.name,
                             }))}
                           />
                           <p className="text-[10px] text-muted-foreground">
                             Splits the spend evenly across the selected members.
-                            None selected = everyone.
+                            None selected = all members.
                           </p>
+                          <AddGuestField
+                            value={guestName}
+                            onChange={setGuestName}
+                            onAdd={onAddGuest}
+                            disabled={addingGuest || !groupId}
+                          />
                         </div>
                       ) : (
                         <div className="flex flex-col gap-2">
                           <Label>Amount per member</Label>
                           <div className="flex flex-col gap-px bg-border ring-1 ring-foreground/10">
-                            {groupMembers.map((m) => (
+                            {splitPeople.map((p) => (
                               <div
-                                key={m.id}
+                                key={p.id}
                                 className="flex items-center gap-2 bg-card px-3 py-1.5"
                               >
                                 <span className="min-w-0 flex-1 truncate text-xs">
-                                  {m.name ?? "Unnamed"}
+                                  {p.name}
+                                  {p.kind === "guest" ? (
+                                    <span className="text-muted-foreground">
+                                      {" "}
+                                      (temp)
+                                    </span>
+                                  ) : null}
                                 </span>
                                 <Input
                                   inputMode="numeric"
                                   value={
-                                    custom[m.id]
-                                      ? formatNumber(Number(custom[m.id]))
+                                    custom[p.id]
+                                      ? formatNumber(Number(custom[p.id]))
                                       : ""
                                   }
                                   onChange={(e) =>
-                                    setCustom((p) => ({
-                                      ...p,
-                                      [m.id]: e.target.value.replace(/\D/g, ""),
+                                    setCustom((prev) => ({
+                                      ...prev,
+                                      [p.id]: e.target.value.replace(/\D/g, ""),
                                     }))
                                   }
                                   placeholder="0"
@@ -413,6 +472,12 @@ function TransactionDialog({
                               </div>
                             ))}
                           </div>
+                          <AddGuestField
+                            value={guestName}
+                            onChange={setGuestName}
+                            onAdd={onAddGuest}
+                            disabled={addingGuest || !groupId}
+                          />
 
                           <div className="flex flex-col gap-1.5">
                             <Label htmlFor="td-vat">
@@ -496,6 +561,46 @@ function TransactionDialog({
         )}
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** Inline "add a temp member" row shown under the split controls. */
+function AddGuestField({
+  value,
+  onChange,
+  onAdd,
+  disabled,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  onAdd: () => void;
+  disabled: boolean;
+}) {
+  return (
+    <div className="flex items-center gap-2 pt-1">
+      <Input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            onAdd();
+          }
+        }}
+        placeholder="Add temp member (name)"
+        className="h-7 flex-1 text-xs"
+      />
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="h-7"
+        disabled={disabled || !value.trim()}
+        onClick={onAdd}
+      >
+        Add
+      </Button>
+    </div>
   );
 }
 

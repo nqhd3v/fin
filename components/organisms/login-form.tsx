@@ -16,7 +16,13 @@ import {
 import { Form, FormInput } from "@/components/molecules/form";
 import { login } from "@/handlers/auth";
 import { toast } from "sonner";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+
+/** Only allow relative in-app paths as a post-auth redirect (no open redirect). */
+function safeNext(next: string | null): string {
+  if (next && next.startsWith("/") && !next.startsWith("//")) return next;
+  return "/";
+}
 
 const loginSchema = yup.object({
   email: yup
@@ -33,6 +39,7 @@ type LoginValues = yup.InferType<typeof loginSchema>;
 
 function LoginForm({ className, ...props }: React.ComponentProps<typeof Card>) {
   const router = useRouter();
+  const next = safeNext(useSearchParams().get("next"));
 
   async function onSubmit(payload: LoginValues) {
     const result = await login(payload);
@@ -44,7 +51,7 @@ function LoginForm({ className, ...props }: React.ComponentProps<typeof Card>) {
       );
       return;
     }
-    router.push("/");
+    router.push(next);
   }
 
   return (
@@ -85,7 +92,11 @@ function LoginForm({ className, ...props }: React.ComponentProps<typeof Card>) {
               <p className="text-center text-xs text-muted-foreground">
                 Don&apos;t have an account?{" "}
                 <Link
-                  href="/register"
+                  href={
+                    next === "/"
+                      ? "/register"
+                      : `/register?next=${encodeURIComponent(next)}`
+                  }
                   className="text-foreground underline-offset-4 hover:underline"
                 >
                   Create one

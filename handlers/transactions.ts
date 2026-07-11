@@ -28,9 +28,13 @@ export interface ICreateTransactionPayload {
   /** group spend: member ids who used this money — equal split among them.
    *  Empty/undefined on a group outcome defaults to all members. */
   participantIds?: string[];
-  /** group spend: explicit per-member amounts (custom split). Takes precedence
-   *  over participantIds. Must sum to `amount`. */
-  splits?: { profileId: string; amount: number }[];
+  /** group spend: temp-member (guest) ids who also used this money — folded
+   *  into the equal split alongside participantIds. */
+  guestParticipantIds?: string[];
+  /** group spend: explicit per-member/guest amounts (custom split). Takes
+   *  precedence over participant ids. Must sum to `amount`. Each row targets a
+   *  real member (profileId) or a temp member (guestId), not both. */
+  splits?: { profileId?: string; guestId?: string; amount: number }[];
   /** storage path of the receipt image this entry was scanned from, if any. */
   receiptPath?: string | null;
 }
@@ -60,8 +64,8 @@ export const createTransaction = async (
           ? [payload.fundId, payload.toFundId!]
           : [payload.fundId];
 
-      // Resolved per-member shares of a group spend.
-      let splitRows: { profileId: string; amount: number }[] = [];
+      // Resolved per-member/guest shares of a group spend.
+      let splitRows: { profileId?: string; guestId?: string; amount: number }[] = [];
 
       if (payload.groupId) {
         // Group transactions use the group's shared pool fund — verify the
@@ -84,17 +88,33 @@ export const createTransaction = async (
         });
         if (poolFunds !== fundIds.length) throw new Error("Fund not found");
 
-        // Only outcomes have "who used it"; build per-member shares.
+        // Only outcomes have "who used it"; build per-member/guest shares.
         if (payload.type === "OUTCOME") {
           const memberIds = new Set(
             group.Profile_groupMembers.map((m) => m.id).concat(group.ownerId),
           );
+          // Valid temp members (guests) of this group.
+          const guestRows = await tx.groupGuest.findMany({
+            where: { groupId: payload.groupId },
+            select: { id: true },
+          });
+          const guestIds = new Set(guestRows.map((g) => g.id));
 
           if (payload.splits && payload.splits.length > 0) {
-            // Custom amounts: validate members + that they sum to the total.
+            // Custom amounts: validate each targets a real member or a group
+            // guest (not both) + that they sum to the total.
             for (const s of payload.splits) {
-              if (!memberIds.has(s.profileId)) {
+              if (s.profileId && s.guestId) {
+                throw new Error("Split targets a member or guest, not both");
+              }
+              if (s.profileId && !memberIds.has(s.profileId)) {
                 throw new Error("Split member is not in the group");
+              }
+              if (s.guestId && !guestIds.has(s.guestId)) {
+                throw new Error("Split guest is not in the group");
+              }
+              if (!s.profileId && !s.guestId) {
+                throw new Error("Split has no member or guest");
               }
               if (!(s.amount >= 0)) throw new Error("Split amount invalid");
             }
@@ -104,15 +124,25 @@ export const createTransaction = async (
             }
             splitRows = payload.splits.filter((s) => s.amount > 0);
           } else {
-            // Equal split among the picked members (default: everyone).
-            const picked = (payload.participantIds ?? []).filter((pid) =>
+            // Equal split among the picked members + guests (default: all
+            // members, no guests).
+            const pickedMembers = (payload.participantIds ?? []).filter((pid) =>
               memberIds.has(pid),
             );
-            const ids = picked.length > 0 ? picked : [...memberIds];
-            const base = Math.floor(amount / ids.length);
-            const remainder = amount - base * ids.length;
-            splitRows = ids.map((profileId, i) => ({
-              profileId,
+            const pickedGuests = (payload.guestParticipantIds ?? []).filter(
+              (gid) => guestIds.has(gid),
+            );
+            const targets: { profileId?: string; guestId?: string }[] =
+              pickedMembers.length + pickedGuests.length > 0
+                ? [
+                    ...pickedMembers.map((profileId) => ({ profileId })),
+                    ...pickedGuests.map((guestId) => ({ guestId })),
+                  ]
+                : [...memberIds].map((profileId) => ({ profileId }));
+            const base = Math.floor(amount / targets.length);
+            const remainder = amount - base * targets.length;
+            splitRows = targets.map((t, i) => ({
+              ...t,
               amount: base + (i === 0 ? remainder : 0),
             }));
           }
@@ -179,7 +209,8 @@ export const createTransaction = async (
           data: splitRows.map((s) => ({
             id: randomUUID(),
             transactionId: txnId,
-            profileId: s.profileId,
+            profileId: s.profileId ?? null,
+            guestId: s.guestId ?? null,
             amount: s.amount,
           })),
         });

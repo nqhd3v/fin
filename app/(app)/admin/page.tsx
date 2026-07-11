@@ -5,6 +5,12 @@ import { listUsers, listGroupsAdmin } from "@/handlers/admin";
 import { AdminUsersTable } from "@/components/organisms/admin-users-table";
 import { AdminGroupsTable } from "@/components/organisms/admin-groups-table";
 
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "admin",
+};
+
 export default async function AdminPage() {
   // Page-level gate: non-admins never see this view.
   if (!(await isAdmin())) redirect("/");

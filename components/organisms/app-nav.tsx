@@ -1,16 +1,21 @@
 "use client";
 
+import * as React from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   House,
   ChartBar,
   UsersThree,
   User,
   ShieldStar,
+  SignOut,
   Code,
   type Icon,
 } from "@phosphor-icons/react";
+
+import { ConfirmPopover } from "@/components/molecules/confirm-popover";
+import { createClient } from "@/lib/supabase/client";
 
 // `wip` flags a route still under development — shown with a Developer badge.
 type NavItem = { href: string; label: string; icon: Icon; wip?: boolean };
@@ -23,6 +28,21 @@ const ITEMS: NavItem[] = [
 ];
 
 const ADMIN_ITEM: NavItem = { href: "/admin", label: "Admin", icon: ShieldStar };
+
+function useSignOut() {
+  const router = useRouter();
+  const [signingOut, setSigningOut] = React.useState(false);
+
+  async function signOut() {
+    setSigningOut(true);
+    const sb = createClient();
+    await sb.auth.signOut();
+    router.push("/login");
+    router.refresh();
+  }
+
+  return { signOut, signingOut };
+}
 
 function useActive() {
   const pathname = usePathname();
@@ -64,7 +84,33 @@ function Sidebar({ isAdmin = false }: { isAdmin?: boolean }) {
           );
         })}
       </nav>
+      <SidebarSignOut />
     </aside>
+  );
+}
+
+function SidebarSignOut() {
+  const { signOut, signingOut } = useSignOut();
+  return (
+    <div className="mt-auto">
+      <ConfirmPopover
+        align="start"
+        message="Sign out of fin?"
+        confirmLabel="Sign out"
+        confirmVariant="default"
+        onConfirm={signOut}
+        trigger={
+          <button
+            type="button"
+            disabled={signingOut}
+            className="flex w-full items-center gap-2.5 px-2 py-2 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
+          >
+            <SignOut className="size-4" />
+            <span className="flex-1 text-left">Sign out</span>
+          </button>
+        }
+      />
+    </div>
   );
 }
 
@@ -75,7 +121,9 @@ function BottomBar({ isAdmin = false }: { isAdmin?: boolean }) {
   return (
     <nav
       className="sticky bottom-0 z-10 grid border-t border-foreground/10 bg-card md:hidden"
-      style={{ gridTemplateColumns: `repeat(${items.length}, minmax(0, 1fr))` }}
+      style={{
+        gridTemplateColumns: `repeat(${items.length + 1}, minmax(0, 1fr))`,
+      }}
     >
       {items.map((item) => {
         const NavIcon = item.icon;
@@ -101,7 +149,31 @@ function BottomBar({ isAdmin = false }: { isAdmin?: boolean }) {
           </Link>
         );
       })}
+      <BottomBarSignOut />
     </nav>
+  );
+}
+
+function BottomBarSignOut() {
+  const { signOut, signingOut } = useSignOut();
+  return (
+    <ConfirmPopover
+      align="end"
+      message="Sign out of fin?"
+      confirmLabel="Sign out"
+      confirmVariant="default"
+      onConfirm={signOut}
+      trigger={
+        <button
+          type="button"
+          disabled={signingOut}
+          className="flex flex-col items-center gap-1 py-2.5 text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
+        >
+          <SignOut className="size-5" />
+          <span className="text-[10px] leading-none">Sign out</span>
+        </button>
+      }
+    />
   );
 }
 

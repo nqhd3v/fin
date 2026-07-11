@@ -1,6 +1,12 @@
 import { getMyProfile } from "@/handlers/profile";
 import { ProfileCard } from "@/components/organisms/profile-card";
 
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "profile",
+};
+
 export default async function ProfilePage() {
   const profile = await getMyProfile();
 

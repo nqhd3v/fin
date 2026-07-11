@@ -50,7 +50,13 @@ export async function updateSession(request: NextRequest) {
     request.nextUrl.pathname.startsWith("/login") ||
     request.nextUrl.pathname.startsWith("/register");
 
-  if (!user && !isAuthRoute) {
+  // Public: the invite-link handler decides itself whether to auto-join (signed
+  // in) or send the visitor to register (signed out), so it must run for
+  // logged-out users instead of being bounced to /login.
+  const isPublicRoute =
+    isAuthRoute || request.nextUrl.pathname.startsWith("/join-group");
+
+  if (!user && !isPublicRoute) {
     // no user, potentially respond by redirecting the user to the login page
     const url = request.nextUrl.clone();
     url.pathname = "/login";

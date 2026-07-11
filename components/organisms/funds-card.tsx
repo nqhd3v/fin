@@ -1,4 +1,7 @@
-import { Bank, Wallet, Money, Plus } from "@phosphor-icons/react/dist/ssr";
+"use client";
+
+import * as React from "react";
+import { Bank, Wallet, Money, Plus, Eye, EyeSlash } from "@phosphor-icons/react";
 import type { Icon } from "@phosphor-icons/react";
 
 import { Button } from "@/components/atoms/button";
@@ -11,27 +14,55 @@ const FUND_ICON: Record<FundDTO["type"], Icon> = {
   CASH: Money,
 };
 
+const HIDE_BALANCES_KEY = "fin:hide-balances";
+
 function FundsCard({ funds }: { funds: FundDTO[] }) {
   const total = funds.reduce((sum, f) => sum + f.balance, 0);
+  const [hidden, setHidden] = React.useState(false);
+
+  // Read after mount — localStorage isn't available during SSR/hydration.
+  React.useEffect(() => {
+    setHidden(localStorage.getItem(HIDE_BALANCES_KEY) === "1");
+  }, []);
+
+  function toggleHidden() {
+    setHidden((h) => {
+      localStorage.setItem(HIDE_BALANCES_KEY, h ? "0" : "1");
+      return !h;
+    });
+  }
+
+  const amount = (value: number) => (hidden ? "••••••" : formatCurrency(value));
 
   return (
     <section className="flex flex-col gap-3 bg-card p-4 ring-1 ring-foreground/10">
       <div className="flex items-center justify-between">
         <h2 className="font-heading text-xs font-medium">Funds</h2>
-        <FundDialog
-          trigger={
-            <Button variant="ghost" size="xs">
-              <Plus />
-              Add
-            </Button>
-          }
-        />
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="xs"
+            onClick={toggleHidden}
+            aria-label={hidden ? "Show balances" : "Hide balances"}
+            aria-pressed={hidden}
+          >
+            {hidden ? <EyeSlash /> : <Eye />}
+          </Button>
+          <FundDialog
+            trigger={
+              <Button variant="ghost" size="xs">
+                <Plus />
+                Add
+              </Button>
+            }
+          />
+        </div>
       </div>
 
       <div>
         <p className="text-[10px] text-muted-foreground">Total balance</p>
         <p className="font-heading text-xl font-medium tabular-nums">
-          {formatCurrency(total)}
+          {amount(total)}
         </p>
       </div>
 
@@ -62,7 +93,7 @@ function FundsCard({ funds }: { funds: FundDTO[] }) {
                       ) : null}
                     </span>
                     <span className="shrink-0 text-xs tabular-nums">
-                      {formatCurrency(f.balance)}
+                      {amount(f.balance)}
                     </span>
                   </button>
                 }

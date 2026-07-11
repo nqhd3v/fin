@@ -21,6 +21,29 @@ model Group {
   Transaction                    Transaction[]
   TransactionSource              TransactionSource[]
   Profile_groupMembers           Profile[]     @relation("groupMembers")
+  GroupGuest                     GroupGuest[]
+}
+
+/// A temporary, account-less member of a group. Created by any member so a
+/// bill can be split with people who haven't signed up yet. When a real user
+/// joins via the invite link they may "claim" one guest (map themselves to it);
+/// `claimedById` set = claimed, and that guest's spend shares roll up to the
+/// claiming Profile in analytics. The record is kept (never rewritten) so
+/// history stays intact and a claim is reversible.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model GroupGuest {
+  id          String   @id
+  groupId     String
+  name        String
+  createdById String   @db.Uuid
+  // Profile that claimed this guest (null = still unclaimed). At most one guest
+  // per user per group.
+  claimedById String?  @db.Uuid
+  createdAt   DateTime @default(now())
+  Group       Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  Profile_createdBy Profile @relation("GroupGuest_createdBy", fields: [createdById], references: [id])
+  Profile_claimedBy Profile? @relation("GroupGuest_claimedBy", fields: [claimedById], references: [id])
+  TransactionSplit  TransactionSplit[]
 }
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
@@ -35,6 +58,8 @@ model Profile {
   RecurringRule                RecurringRule[]
   Group_groupMembers           Group[]              @relation("groupMembers")
   TransactionSplit             TransactionSplit[]
+  GroupGuest_createdBy         GroupGuest[]         @relation("GroupGuest_createdBy")
+  GroupGuest_claimedBy         GroupGuest[]         @relation("GroupGuest_claimedBy")
 }
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
@@ -82,12 +107,17 @@ model Transaction {
 model TransactionSplit {
   id            String      @id
   transactionId String
-  profileId     String      @db.Uuid
+  // Exactly one of profileId / guestId is set: a real member share, or a
+  // temporary (account-less) group guest's share.
+  profileId     String?     @db.Uuid
+  guestId       String?
   amount        Float
   Transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
-  Profile       Profile     @relation(fields: [profileId], references: [id])
+  Profile       Profile?    @relation(fields: [profileId], references: [id])
+  GroupGuest    GroupGuest? @relation(fields: [guestId], references: [id], onDelete: Cascade)
 
   @@unique([transactionId, profileId])
+  @@unique([transactionId, guestId])
 }
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.

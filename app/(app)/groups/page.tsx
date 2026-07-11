@@ -13,6 +13,12 @@ import { GroupCreateDialog } from "@/components/organisms/group-create-dialog";
 import { GroupJoinDialog } from "@/components/organisms/group-join-dialog";
 import { listGroups } from "@/handlers/groups";
 
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "groups",
+};
+
 export default async function GroupsPage() {
   const groups = await listGroups();
 

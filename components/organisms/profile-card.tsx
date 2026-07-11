@@ -4,13 +4,13 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import * as yup from "yup";
 import { toast } from "sonner";
-import { Eraser, SignOut } from "@phosphor-icons/react";
+import { Eraser } from "@phosphor-icons/react";
 
 import { Badge } from "@/components/atoms/badge";
 import { Button } from "@/components/atoms/button";
 import { Form, FormInput } from "@/components/molecules/form";
 import { ConfirmPopover } from "@/components/molecules/confirm-popover";
-import { createClient } from "@/lib/supabase/client";
+import { ThemeSwitch } from "@/components/molecules/theme-switch";
 import { resetMyData, updateMyName, type IMyProfile } from "@/handlers/profile";
 
 const schema = yup.object({
@@ -22,7 +22,6 @@ type Values = yup.InferType<typeof schema>;
 function ProfileCard({ profile }: { profile: IMyProfile }) {
   const router = useRouter();
   const [resetting, setResetting] = React.useState(false);
-  const [signingOut, setSigningOut] = React.useState(false);
 
   async function onSubmit(values: Values) {
     const res = await updateMyName(values.name);
@@ -43,14 +42,6 @@ function ProfileCard({ profile }: { profile: IMyProfile }) {
       return;
     }
     toast.success("Personal data reset");
-    router.refresh();
-  }
-
-  async function onSignOut() {
-    setSigningOut(true);
-    const sb = createClient();
-    await sb.auth.signOut();
-    router.push("/login");
     router.refresh();
   }
 
@@ -118,6 +109,12 @@ function ProfileCard({ profile }: { profile: IMyProfile }) {
         </div>
       </section>
 
+      {/* Appearance */}
+      <section className="flex flex-col gap-3 bg-card p-4 ring-1 ring-foreground/10">
+        <h2 className="font-heading text-xs font-medium">Appearance</h2>
+        <ThemeSwitch />
+      </section>
+
       {/* Danger zone */}
       <section className="flex flex-col gap-3 bg-card p-4 ring-1 ring-destructive/30">
         <h2 className="font-heading text-xs font-medium text-destructive">
@@ -156,17 +153,6 @@ function ProfileCard({ profile }: { profile: IMyProfile }) {
           />
         </div>
       </section>
-
-      {/* Sign out */}
-      <Button
-        type="button"
-        variant="outline"
-        onClick={onSignOut}
-        disabled={signingOut}
-      >
-        <SignOut />
-        Sign out
-      </Button>
     </div>
   );
 }

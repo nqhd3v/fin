@@ -120,13 +120,18 @@ function AdminUserDialog({ trigger, user }: Props) {
                   align="start"
                   message={
                     <>
-                      Reset all finance data for{" "}
+                      Reset all data for{" "}
                       <span className="font-medium">
                         {user.name ?? user.id}
                       </span>
                       ? {resetTotal} records (transactions, funds, purposes,
-                      rules) will be permanently deleted. The account is kept.
-                      This cannot be undone.
+                      rules){user.ownedGroups > 0 ? (
+                        <> plus {user.ownedGroups} owned group
+                        {user.ownedGroups > 1 ? "s" : ""} (pool, group
+                        transactions, temp members)</>
+                      ) : null}{" "}
+                      will be permanently deleted, and they&apos;ll leave any
+                      other groups. The account is kept. This cannot be undone.
                     </>
                   }
                   confirmLabel="Reset data"

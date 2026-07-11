@@ -1,5 +1,11 @@
 import { ResendForm } from "@/components/organisms/resend-form";
 
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "resend",
+};
+
 export default async function ResendPage({
   searchParams,
 }: {

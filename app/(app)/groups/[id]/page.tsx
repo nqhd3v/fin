@@ -12,6 +12,7 @@ import { TransactionDialog } from "@/components/organisms/transaction-dialog";
 import { QuickLogGrid } from "@/components/organisms/quick-log-grid";
 import { GroupActions } from "@/components/organisms/group-actions";
 import { GroupMembersCard } from "@/components/organisms/group-members-card";
+import { GroupGuestClaim } from "@/components/organisms/group-guest-claim";
 import { GroupFeed } from "@/components/organisms/group-feed";
 import { GroupPendingReimbursements } from "@/components/organisms/group-pending-reimbursements";
 import { getGroupDetail } from "@/handlers/groups";
@@ -19,12 +20,24 @@ import { listFunds } from "@/handlers/funds";
 import { listPurposeNames, listQuickLogPurposes } from "@/handlers/purposes";
 import { formatCurrency } from "@/lib/format";
 
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "groups",
+};
+
 export default async function GroupDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ welcome?: string }>;
 }) {
   const { id } = await params;
+  // Set by the invite-link redirect — the claim prompt is shown only to a
+  // freshly-joined user, never to established members.
+  const { welcome } = await searchParams;
+  const justJoined = welcome === "1";
   const [group, purposes, quickLog, fundRows] = await Promise.all([
     getGroupDetail(id),
     listPurposeNames(),
@@ -41,6 +54,10 @@ export default async function GroupDetailPage({
     balance: f.balance,
   }));
   const members = group.members.map((m) => ({ id: m.id, name: m.name }));
+  // Unclaimed temp members — selectable in the split dialog + claim prompt.
+  const openGuests = group.guests
+    .filter((g) => !g.claimedById)
+    .map((g) => ({ id: g.id, name: g.name }));
 
   // Blocked by an admin: members see the reason, nothing else.
   if (group.blockedReason) {
@@ -100,6 +117,7 @@ export default async function GroupDetailPage({
             groupId={group.id}
             groupFund={pool}
             groupMembers={members}
+            groupGuests={openGuests}
             title="New group transaction"
             trigger={
               <Button size="sm">
@@ -125,6 +143,12 @@ export default async function GroupDetailPage({
 
         <GroupPendingReimbursements items={group.pending} funds={personalFunds} />
 
+        {justJoined &&
+        !group.viewerHasClaim &&
+        group.guests.some((g) => !g.claimedById) ? (
+          <GroupGuestClaim guests={group.guests.filter((g) => !g.claimedById)} />
+        ) : null}
+
         <QuickLogGrid
           funds={[]}
           purposes={quickLog}
@@ -136,6 +160,7 @@ export default async function GroupDetailPage({
           groupId={group.id}
           groupName={group.name}
           members={group.members}
+          guests={group.guests}
           transactions={group.transactions}
           isOwner={group.isOwner}
         />

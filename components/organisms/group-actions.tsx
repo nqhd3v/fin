@@ -21,7 +21,7 @@ function GroupActions({ groupId, isOwner, inviteToken }: Props) {
     // Prefer a one-click invite link (joins directly, skips the passcode);
     // fall back to the raw group ID if no token exists.
     const link = inviteToken
-      ? `${window.location.origin}/groups/join?token=${inviteToken}`
+      ? `${window.location.origin}/join-group?token=${inviteToken}`
       : groupId;
     try {
       await navigator.clipboard.writeText(link);

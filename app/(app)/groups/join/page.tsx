@@ -3,7 +3,16 @@ import { redirect } from "next/navigation";
 import { Prohibit } from "@phosphor-icons/react/dist/ssr";
 
 import { Button } from "@/components/atoms/button";
-import { joinByToken } from "@/handlers/groups";
+
+/**
+ * Legacy invite path. The canonical handler is now `/join-group` (public, so it
+ * can send signed-out visitors to register). Forward old links there.
+ */
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "join group",
+};
 
 export default async function JoinByTokenPage({
   searchParams,
@@ -11,14 +20,7 @@ export default async function JoinByTokenPage({
   searchParams: Promise<{ token?: string }>;
 }) {
   const { token } = await searchParams;
-
-  // Valid token → join and go straight to the group.
-  if (token) {
-    const res = await joinByToken(token);
-    if (res.ok) redirect(`/groups/${res.id}`);
-    return <JoinError message={res.errorMessage} />;
-  }
-
+  if (token) redirect(`/join-group?token=${encodeURIComponent(token)}`);
   return <JoinError message="This invite link is missing its token." />;
 }
 

@@ -92,20 +92,58 @@ export const updateUser = async (
 };
 
 /**
- * Wipe a user's finance data — transactions, funds, quick-log purposes, and
- * recurring rules — while keeping the account itself. Irreversible.
+ * Wipe a user's data — transactions, funds, quick-log purposes, recurring
+ * rules, the groups they own (pool, group transactions, guests, memberships),
+ * their membership in other groups, and any temp members they created — while
+ * keeping the account itself. Irreversible.
  */
 export const resetAccountData = async (
   id: string,
 ): Promise<Result<object>> => {
   try {
     await requireAdmin();
+    // Groups the user owns are torn down entirely, like deleteGroup.
+    const owned = await prisma.group.findMany({
+      where: { ownerId: id },
+      select: { id: true },
+    });
+    const ownedIds = owned.map((g) => g.id);
+
     await prisma.$transaction([
-      // Transactions first: they reference funds, purposes, and rules.
+      // 1. Tear down each owned group: its transactions + guests + pool fund
+      //    reference the group, so drop them before the group itself.
+      ...ownedIds.flatMap((gid) => [
+        prisma.transaction.deleteMany({ where: { groupId: gid } }),
+        prisma.groupGuest.deleteMany({ where: { groupId: gid } }),
+        prisma.transactionSource.deleteMany({ where: { groupId: gid } }),
+        prisma.group.update({
+          where: { id: gid },
+          data: { Profile_groupMembers: { set: [] } },
+        }),
+        prisma.group.delete({ where: { id: gid } }),
+      ]),
+
+      // 2. The user's own data. Transactions first: they reference funds,
+      //    purposes, and rules (this also clears any they authored in other
+      //    groups they merely belong to).
       prisma.transaction.deleteMany({ where: { authorId: id } }),
       prisma.recurringRule.deleteMany({ where: { ownerId: id } }),
       prisma.transactionSource.deleteMany({ where: { ownerId: id } }),
       prisma.transactionPurpose.deleteMany({ where: { ownerId: id } }),
+
+      // 3. Drop temp members they created in other groups, and release any
+      //    temp member they had claimed (returns it to unclaimed).
+      prisma.groupGuest.deleteMany({ where: { createdById: id } }),
+      prisma.groupGuest.updateMany({
+        where: { claimedById: id },
+        data: { claimedById: null },
+      }),
+
+      // 4. Leave every remaining group they were only a member of.
+      prisma.profile.update({
+        where: { id },
+        data: { Group_groupMembers: { set: [] } },
+      }),
     ]);
     revalidatePath("/admin");
     revalidatePath("/");

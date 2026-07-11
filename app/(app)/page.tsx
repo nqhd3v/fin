@@ -16,6 +16,12 @@ import {
   listRecentTransactions,
 } from "@/handlers/transactions";
 
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "home",
+};
+
 export default async function Home() {
   // No cron: materialize any due recurring occurrences on load.
   await generateDueTransactions();
