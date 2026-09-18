@@ -277,6 +277,8 @@ export interface IGroupTransaction {
   splits: { name: string | null; amount: number }[];
   // True when the split isn't "everyone, evenly" (subset and/or custom amounts).
   customSplit: boolean;
+  // Scanned receipt image (storage path), viewable by every member.
+  receiptPath: string | null;
 }
 
 export interface IGroupFund {
@@ -384,6 +386,7 @@ export const getGroupDetail = async (
         authorId: true,
         payeeId: true,
         reimbursementStatus: true,
+        receiptPath: true,
         TransactionPurpose: { select: { name: true } },
         Profile: { select: { name: true } },
         TransactionSplit: { select: { profileId: true, guestId: true, amount: true } },
@@ -503,6 +506,7 @@ export const getGroupDetail = async (
       authorId: t.authorId,
       payeeName: t.payeeId ? nameById.get(t.payeeId) ?? null : null,
       reimbursementStatus: t.reimbursementStatus,
+      receiptPath: t.receiptPath,
       splits: t.TransactionSplit.map((s) => ({
         name: s.profileId
           ? nameById.get(s.profileId) ?? null

@@ -9,6 +9,7 @@ import {
 
 import { Button } from "@/components/atoms/button";
 import { TransactionDialog } from "@/components/organisms/transaction-dialog";
+import { ScanInvoice } from "@/components/organisms/scan-invoice";
 import { QuickLogGrid } from "@/components/organisms/quick-log-grid";
 import { GroupActions } from "@/components/organisms/group-actions";
 import { GroupMembersCard } from "@/components/organisms/group-members-card";
@@ -110,6 +111,14 @@ export default async function GroupDetailPage({
             groupId={group.id}
             isOwner={group.isOwner}
             inviteToken={group.inviteToken}
+          />
+          <ScanInvoice
+            funds={[]}
+            purposes={purposes}
+            groupId={group.id}
+            groupFund={pool}
+            groupMembers={members}
+            groupGuests={openGuests}
           />
           <TransactionDialog
             funds={[]}

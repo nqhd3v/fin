@@ -27,16 +27,21 @@ type Defaults = {
  * to Supabase Storage (user's own folder), sends it to Gemini to read the
  * amount/description/date, then opens the transaction dialog prefilled for the
  * user to confirm. `variant` picks the header button or the quick-log tile.
+ * Group props are passed straight through to the dialog (group mode).
  */
 function ScanInvoice({
   funds,
   purposes,
   variant = "button",
+  ...group
 }: {
   funds: FundOption[];
   purposes: string[];
   variant?: "button" | "tile";
-}) {
+} & Pick<
+  React.ComponentProps<typeof TransactionDialog>,
+  "groupId" | "groupFund" | "groupMembers" | "groupGuests"
+>) {
   const inputRef = React.useRef<HTMLInputElement>(null);
   const [busy, setBusy] = React.useState(false);
   const [open, setOpen] = React.useState(false);
@@ -145,6 +150,7 @@ function ScanInvoice({
         mode="full"
         title="From receipt"
         defaults={defaults}
+        {...group}
       />
     </>
   );

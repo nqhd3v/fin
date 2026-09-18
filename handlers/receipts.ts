@@ -1,5 +1,6 @@
 "use server";
 
+import prisma from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
 import { requireUserId } from "@/lib/auth";
 import { RECEIPTS_BUCKET } from "@/lib/receipts";
@@ -47,13 +48,25 @@ export const scanReceipt = async (
   }
 };
 
+/** True when the path is attached to a transaction in a group the user belongs
+ *  to — group receipts are shared with every member. */
+async function sharedGroupReceipt(path: string, userId: string) {
+  const n = await prisma.transaction.count({
+    where: {
+      receiptPath: path,
+      Group: { Profile_groupMembers: { some: { id: userId } } },
+    },
+  });
+  return n > 0;
+}
+
 /** Short-lived signed URL so a saved receipt can be viewed from its entry. */
 export const receiptSignedUrl = async (
   path: string,
 ): Promise<Result<{ url: string }>> => {
   try {
     const userId = await requireUserId();
-    if (!ownsPath(path, userId)) {
+    if (!ownsPath(path, userId) && !(await sharedGroupReceipt(path, userId))) {
       return { ok: false, errorMessage: "Receipt not found" };
     }
     const sb = await createClient();

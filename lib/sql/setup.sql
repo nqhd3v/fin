@@ -107,6 +107,25 @@ CREATE POLICY "receipts own read" ON storage.objects
   FOR SELECT TO authenticated
   USING (bucket_id = 'receipts' AND (storage.foldername(name))[1] = auth.uid()::text);
 
+-- Group receipts: any member of the group may read a receipt attached to one
+-- of its transactions. SECURITY DEFINER so the lookup isn't blocked by the
+-- Transaction/Group RLS of the caller.
+CREATE OR REPLACE FUNCTION public.can_read_group_receipt(p text)
+RETURNS boolean
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public."Transaction" t
+    JOIN public."_groupMembers" gm ON gm."A" = t."groupId"
+    WHERE t."receiptPath" = p AND gm."B" = auth.uid()
+  );
+$$;
+
+DROP POLICY IF EXISTS "receipts group read" ON storage.objects;
+CREATE POLICY "receipts group read" ON storage.objects
+  FOR SELECT TO authenticated
+  USING (bucket_id = 'receipts' AND public.can_read_group_receipt(name));
+
 DROP POLICY IF EXISTS "receipts own insert" ON storage.objects;
 CREATE POLICY "receipts own insert" ON storage.objects
   FOR INSERT TO authenticated

@@ -4,6 +4,7 @@ import {
   ArrowsLeftRight,
 } from "@phosphor-icons/react/dist/ssr";
 
+import { ReceiptLink } from "@/components/molecules/receipt-link";
 import { formatCurrency, formatDayLabel } from "@/lib/format";
 import type { IGroupTransaction } from "@/handlers/groups";
 
@@ -89,6 +90,7 @@ function GroupFeed({ items }: { items: IGroupTransaction[] }) {
                         {subtitle.filter(Boolean).join(" · ")}
                       </p>
                     </div>
+                    {t.receiptPath ? <ReceiptLink path={t.receiptPath} /> : null}
                     <span className={"shrink-0 text-xs tabular-nums " + accent}>
                       {sign}
                       {formatCurrency(t.amount)}
