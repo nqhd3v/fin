@@ -42,6 +42,10 @@ function DialogOverlay({
   );
 }
 
+// Open Select/Popover/Combobox/Calendar content (all portaled to <body>).
+const OPEN_POPPER =
+  "[data-slot='select-content'][data-state='open'],[data-slot='popover-content'][data-state='open'],[data-radix-popper-content-wrapper]";
+
 function DialogContent({
   className,
   children,
@@ -51,25 +55,36 @@ function DialogContent({
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showClose?: boolean;
 }) {
+  // Whether a dropdown was open when the current gesture started. Must be
+  // captured at pointerdown (capture phase, before Radix handles it): by the
+  // time the dialog's outside handler runs the dropdown is often gone — Select
+  // unmounts at once, and on touch Radix defers the dismiss to `click`.
+  const popperOpenAtPointerDown = React.useRef(false);
+  React.useEffect(() => {
+    const onPointerDown = () => {
+      popperOpenAtPointerDown.current = Boolean(
+        document.querySelector(OPEN_POPPER),
+      );
+    };
+    document.addEventListener("pointerdown", onPointerDown, true);
+    return () =>
+      document.removeEventListener("pointerdown", onPointerDown, true);
+  }, []);
+
   return (
     <DialogPortal>
       <DialogOverlay />
       <DialogPrimitive.Content
         data-slot="dialog-content"
         onInteractOutside={(e) => {
-          // Select/Popover/Calendar content is portaled to <body>, so closing a
-          // dropdown reads as a click-away on the dialog. Two cases to ignore:
-          // 1. the interaction lands on a portaled popper, or
-          // 2. a dropdown/popover is currently open — the click is meant to
-          //    dismiss *it*, not the dialog (e.g. clicking empty space).
+          // A click that lands on a portaled dropdown, or that is meant to
+          // dismiss an open one, must not also close the dialog.
           const target = e.target as Element | null;
-          const onPopper = target?.closest(
-            "[data-radix-popper-content-wrapper],[data-slot='select-content'],[data-slot='popover-content']",
-          );
-          const popperOpen = document.querySelector(
-            "[data-slot='select-content'][data-state='open'],[data-slot='popover-content'][data-state='open'],[data-radix-popper-content-wrapper]",
-          );
-          if (onPopper || popperOpen) {
+          if (
+            popperOpenAtPointerDown.current ||
+            target?.closest(OPEN_POPPER) ||
+            document.querySelector(OPEN_POPPER)
+          ) {
             e.preventDefault();
             return;
           }

@@ -113,7 +113,9 @@ export const joinGroup = async (
       where: { id: group.id },
       data: { Profile_groupMembers: { connect: { id: userId } } },
     });
-    revalidatePath("/groups");
+    // No revalidatePath here: this runs while `/join-group` renders, where
+    // Next forbids it (Server Functions / Route Handlers only). The group
+    // pages are dynamic, so the redirect that follows already shows fresh data.
     return { ok: true, id: group.id };
   } catch (e) {
     console.error("Error when trying to join group:", e);
@@ -255,6 +257,8 @@ export interface IGroupGuest {
   // spend shares roll up to that member; the guest row stays for reference.
   claimedById: string | null;
   claimedByName: string | null;
+  // Who created it — that member can't be linked to it (see linkGuest).
+  createdById: string;
   // Whether the current user created it (they can remove it).
   createdByMe: boolean;
   // Spend attributed to this guest while unclaimed (0 once claimed).
@@ -480,6 +484,7 @@ export const getGroupDetail = async (
     name: g.name,
     claimedById: g.claimedById,
     claimedByName: g.claimedById ? nameById.get(g.claimedById) ?? null : null,
+    createdById: g.createdById,
     createdByMe: g.createdById === userId,
     outcome: guestOutcome.get(g.id) ?? 0,
   }));
@@ -810,14 +815,16 @@ export const listUnclaimedGuests = async (
 };
 
 /**
- * Claim a temporary member as yourself. At most one guest per user per group;
- * the record is kept (claimedById set) so its past spend shares roll up to you.
+ * Map a temporary member to a real member of the group. The guest record is
+ * kept (claimedById set) so its past spend shares roll up to that member.
+ * `profileId` omitted = the caller claims it for themselves; set = the group
+ * owner links it to that member.
  */
-export const claimGuest = async (
+const linkGuest = async (
   guestId: string,
+  profileId?: string,
 ): Promise<Result<{ groupId: string }>> => {
   try {
-    const userId = await requireUserId();
     const guest = await prisma.groupGuest.findUnique({
       where: { id: guestId },
       select: { groupId: true, claimedById: true, createdById: true },
@@ -825,30 +832,65 @@ export const claimGuest = async (
     if (!guest) return { ok: false, errorMessage: "Guest not found" };
     const m = await requireGroupMembership(guest.groupId);
     if (!m.ok) return m;
+    const self = profileId === undefined || profileId === m.userId;
+    const targetId = profileId ?? m.userId;
+    if (!self) {
+      if (m.ownerId !== m.userId) {
+        return { ok: false, errorMessage: "Only the group owner can link members" };
+      }
+      const isMember = await prisma.group.count({
+        where: {
+          id: guest.groupId,
+          Profile_groupMembers: { some: { id: targetId } },
+        },
+      });
+      if (!isMember) return { ok: false, errorMessage: "Not a group member" };
+    }
     if (guest.claimedById) {
       return { ok: false, errorMessage: "This member is already claimed" };
     }
     // A temp member stands in for a person with no account. Whoever created it
     // is already a real member representing themselves, so they can't also be
     // the temp person.
-    if (guest.createdById === userId) {
-      return { ok: false, errorMessage: "You can't claim a temp member you created" };
+    if (guest.createdById === targetId) {
+      return {
+        ok: false,
+        errorMessage: self
+          ? "You can't claim a temp member you created"
+          : "A member can't be linked to a temp member they created",
+      };
     }
     const already = await prisma.groupGuest.count({
-      where: { groupId: guest.groupId, claimedById: userId },
+      where: { groupId: guest.groupId, claimedById: targetId },
     });
     if (already > 0) {
-      return { ok: false, errorMessage: "You already claimed a member in this group" };
+      return {
+        ok: false,
+        errorMessage: self
+          ? "You already claimed a member in this group"
+          : "That member is already linked to a temp member",
+      };
     }
     await prisma.groupGuest.update({
       where: { id: guestId },
-      data: { claimedById: userId },
+      data: { claimedById: targetId },
     });
     revalidatePath(`/groups/${guest.groupId}`);
     revalidatePath("/");
     return { ok: true, groupId: guest.groupId };
   } catch (e) {
-    console.error("Error when trying to claim group guest:", e);
+    console.error("Error when trying to link group guest:", e);
     return { ok: false, errorMessage: (e as Error).message };
   }
 };
+
+/** Claim a temporary member as yourself (the just-joined prompt). */
+export const claimGuest = async (
+  guestId: string,
+): Promise<Result<{ groupId: string }>> => linkGuest(guestId);
+
+/** Group owner: link a temporary member to a real member. */
+export const assignGuest = async (
+  guestId: string,
+  profileId: string,
+): Promise<Result<{ groupId: string }>> => linkGuest(guestId, profileId);

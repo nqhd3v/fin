@@ -1,16 +1,30 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { Crown, UserMinus, UserCircle, UserFocus } from "@phosphor-icons/react";
+import {
+  Crown,
+  LinkSimple,
+  UserMinus,
+  UserCircle,
+  UserFocus,
+} from "@phosphor-icons/react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/atoms/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/atoms/dropdown-menu";
 import { ConfirmPopover } from "@/components/molecules/confirm-popover";
 import { GroupExport } from "@/components/organisms/group-export";
 import { formatCurrency } from "@/lib/format";
 import {
   removeMember,
   removeGuest,
+  assignGuest,
   type IGroupMember,
   type IGroupGuest,
   type IGroupTransaction,
@@ -52,6 +66,19 @@ function GroupMembersCard({
       return;
     }
     toast.success("Member removed");
+    router.refresh();
+  }
+
+  // Members already linked to a temp member can't take another.
+  const linkedIds = new Set(guests.map((g) => g.claimedById).filter(Boolean));
+
+  async function onAssignGuest(guestId: string, profileId: string) {
+    const res = await assignGuest(guestId, profileId);
+    if (!res.ok) {
+      toast.warning(res.errorMessage);
+      return;
+    }
+    toast.success("Temp member linked");
     router.refresh();
   }
 
@@ -150,6 +177,14 @@ function GroupMembersCard({
                   Not on the app yet
                 </span>
               </span>
+              {isOwner ? (
+                <GuestLinkMenu
+                  members={members.filter(
+                    (m) => !linkedIds.has(m.id) && m.id !== g.createdById,
+                  )}
+                  onPick={(profileId) => onAssignGuest(g.id, profileId)}
+                />
+              ) : null}
               {isOwner || g.createdByMe ? (
                 <ConfirmPopover
                   message={`Remove temp member "${g.name}"? Only possible if they're not used in a spend.`}
@@ -175,6 +210,42 @@ function GroupMembersCard({
         ))}
       </div>
     </section>
+  );
+}
+
+/** Owner-only: pick the real member this temp member actually is. */
+function GuestLinkMenu({
+  members,
+  onPick,
+}: {
+  members: IGroupMember[];
+  onPick: (profileId: string) => void;
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-xs"
+          aria-label="Link to a member"
+        >
+          <LinkSimple />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuLabel>Link to member</DropdownMenuLabel>
+        {members.length === 0 ? (
+          <DropdownMenuItem disabled>No available members</DropdownMenuItem>
+        ) : (
+          members.map((m) => (
+            <DropdownMenuItem key={m.id} onSelect={() => onPick(m.id)}>
+              {m.name ?? m.email ?? "Unnamed"}
+            </DropdownMenuItem>
+          ))
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
