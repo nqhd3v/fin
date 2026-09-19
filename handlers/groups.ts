@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import prisma from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth";
 import { resolveGroupSplits, type ISplitInput } from "@/lib/group-splits";
+import { deleteGroupTransactionTx } from "@/lib/group-transactions";
 import type { TransactionType } from "@/lib/generated/prisma/client";
 
 type Result<T> = ({ ok: true } & T) | { ok: false; errorMessage: string };
@@ -292,6 +293,8 @@ export interface IGroupTransaction {
   receiptPath: string | null;
   // Viewer may edit "used by" (group owner only).
   canEditSplits: boolean;
+  // Viewer may delete it: group owner, unless it's an accepted reimbursement.
+  canDelete: boolean;
 }
 
 export interface IGroupFund {
@@ -538,6 +541,8 @@ export const getGroupDetail = async (
       }),
       canEditSplits:
         t.type === "OUTCOME" && group.ownerId === userId,
+      canDelete:
+        group.ownerId === userId && t.reimbursementStatus !== "ACCEPTED",
       customSplit:
         t.type === "OUTCOME" &&
         t.TransactionSplit.length > 0 &&
@@ -977,6 +982,24 @@ export const updateGroupSplits = async (
     return { ok: true };
   } catch (e) {
     console.error("Error when trying to update group splits:", e);
+    return { ok: false, errorMessage: (e as Error).message };
+  }
+};
+
+/** Delete a group transaction and restore the pool balance. Owner only. */
+export const deleteGroupTransaction = async (
+  transactionId: string,
+): Promise<Result<object>> => {
+  try {
+    const userId = await requireUserId();
+    const groupId = await prisma.$transaction((tx) =>
+      deleteGroupTransactionTx(tx, userId, transactionId),
+    );
+    revalidatePath(`/groups/${groupId}`);
+    revalidatePath("/");
+    return { ok: true };
+  } catch (e) {
+    console.error("Error when trying to delete group transaction:", e);
     return { ok: false, errorMessage: (e as Error).message };
   }
 };

@@ -6,6 +6,7 @@ import {
 
 import { ReceiptLink } from "@/components/molecules/receipt-link";
 import { GroupSplitDialog } from "@/components/organisms/group-split-dialog";
+import { GroupTransactionDelete } from "@/components/organisms/group-transaction-delete";
 import { formatCurrency, formatDayLabel } from "@/lib/format";
 import type { IGroupTransaction } from "@/handlers/groups";
 
@@ -108,6 +109,7 @@ function GroupFeed({
                         guests={guests}
                       />
                     ) : null}
+                    {t.canDelete ? <GroupTransactionDelete id={t.id} /> : null}
                     <span className={"shrink-0 text-xs tabular-nums " + accent}>
                       {sign}
                       {formatCurrency(t.amount)}
