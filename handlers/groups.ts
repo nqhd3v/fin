@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 
 import prisma from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth";
+import { resolveGroupSplits, type ISplitInput } from "@/lib/group-splits";
 import type { TransactionType } from "@/lib/generated/prisma/client";
 
 type Result<T> = ({ ok: true } & T) | { ok: false; errorMessage: string };
@@ -277,12 +278,20 @@ export interface IGroupTransaction {
   // Set when the transfer is a reimbursement pool → member.
   payeeName: string | null;
   reimbursementStatus: string | null;
-  // Group spend: per-member shares (name + amount). Empty = whole group / n/a.
-  splits: { name: string | null; amount: number }[];
+  // Group spend: per-member shares. Empty = whole group / n/a. A claimed
+  // guest's share resolves to the claiming member (profileId).
+  splits: {
+    name: string | null;
+    amount: number;
+    profileId: string | null;
+    guestId: string | null;
+  }[];
   // True when the split isn't "everyone, evenly" (subset and/or custom amounts).
   customSplit: boolean;
   // Scanned receipt image (storage path), viewable by every member.
   receiptPath: string | null;
+  // Viewer may edit "used by" (group owner only).
+  canEditSplits: boolean;
 }
 
 export interface IGroupFund {
@@ -512,14 +521,23 @@ export const getGroupDetail = async (
       payeeName: t.payeeId ? nameById.get(t.payeeId) ?? null : null,
       reimbursementStatus: t.reimbursementStatus,
       receiptPath: t.receiptPath,
-      splits: t.TransactionSplit.map((s) => ({
-        name: s.profileId
-          ? nameById.get(s.profileId) ?? null
-          : s.guestId
-            ? guestLabel(s.guestId)
-            : null,
-        amount: s.amount,
-      })),
+      splits: t.TransactionSplit.map((s) => {
+        const claimer = s.guestId
+          ? guestById.get(s.guestId)?.claimedById ?? null
+          : null;
+        return {
+          name: s.profileId
+            ? nameById.get(s.profileId) ?? null
+            : s.guestId
+              ? guestLabel(s.guestId)
+              : null,
+          amount: s.amount,
+          profileId: s.profileId ?? claimer,
+          guestId: claimer ? null : s.guestId,
+        };
+      }),
+      canEditSplits:
+        t.type === "OUTCOME" && group.ownerId === userId,
       customSplit:
         t.type === "OUTCOME" &&
         t.TransactionSplit.length > 0 &&
@@ -894,3 +912,71 @@ export const assignGuest = async (
   guestId: string,
   profileId: string,
 ): Promise<Result<{ groupId: string }>> => linkGuest(guestId, profileId);
+
+/**
+ * Re-set who used an existing group spend ("used by" / custom amounts). The
+ * amount and pool balance are unchanged — only the per-member shares are
+ * replaced. Group owner only.
+ */
+export const updateGroupSplits = async (
+  transactionId: string,
+  input: ISplitInput,
+): Promise<Result<object>> => {
+  try {
+    const userId = await requireUserId();
+    const txn = await prisma.transaction.findUnique({
+      where: { id: transactionId },
+      select: {
+        type: true,
+        amount: true,
+        Group: {
+          select: {
+            id: true,
+            ownerId: true,
+            blockedReason: true,
+            Profile_groupMembers: { select: { id: true } },
+          },
+        },
+      },
+    });
+    const group = txn?.Group;
+    if (!txn || !group) return { ok: false, errorMessage: "Transaction not found" };
+    if (txn.type !== "OUTCOME") {
+      return { ok: false, errorMessage: "Only spends have a split" };
+    }
+    if (group.blockedReason) {
+      return { ok: false, errorMessage: "This group is blocked" };
+    }
+    if (group.ownerId !== userId) {
+      return { ok: false, errorMessage: "Only the group owner can edit this" };
+    }
+
+    await prisma.$transaction(async (tx) => {
+      const rows = await resolveGroupSplits(
+        tx,
+        {
+          id: group.id,
+          ownerId: group.ownerId,
+          memberIds: group.Profile_groupMembers.map((m) => m.id),
+        },
+        txn.amount,
+        input,
+      );
+      await tx.transactionSplit.deleteMany({ where: { transactionId } });
+      await tx.transactionSplit.createMany({
+        data: rows.map((s) => ({
+          id: randomUUID(),
+          transactionId,
+          profileId: s.profileId ?? null,
+          guestId: s.guestId ?? null,
+          amount: s.amount,
+        })),
+      });
+    });
+    revalidatePath(`/groups/${group.id}`);
+    return { ok: true };
+  } catch (e) {
+    console.error("Error when trying to update group splits:", e);
+    return { ok: false, errorMessage: (e as Error).message };
+  }
+};

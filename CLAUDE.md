@@ -209,7 +209,7 @@ Done so far: Admin (users + groups), Group mode end-to-end (pool fund,
 contribute/spend, "used by" even split + custom per-member amounts + VAT in the
 transaction dialog, invite-link via `Group.inviteToken` → `/groups/join?token=`
 skips passcode, reimbursement queue with accept→personal income /
-reject→label-only), Profile page (`handlers/profile.ts` — rename, data counts,
+reject→label-only, edit "used by" of past spends via `updateGroupSplits` — group owner only, owner can log for another member via `authorId`), Profile page (`handlers/profile.ts` — rename, data counts,
 reset own personal data, sign out), ConfirmPopover, dropdown-in-dialog fix,
 WIP nav.
 Not yet built: AI summaries, Insights page, recurring DB wiring,

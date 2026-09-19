@@ -89,6 +89,8 @@ const schema = yup.object({
   payeeId: yup.string().default(EXTERNAL),
   // Group external spend: member ids who used the money (default all).
   participantIds: yup.array().of(yup.string().required()).default([]),
+  // Group, owner only: member the entry is logged for (becomes its author).
+  authorId: yup.string().default(""),
   at: yup.date().required(),
 });
 
@@ -127,6 +129,9 @@ type Props = {
   groupMembers?: { id: string; name: string | null }[];
   /** unclaimed temp members (guests) — selectable in "Used by" / custom split */
   groupGuests?: { id: string; name: string }[];
+  /** set when the viewer owns the group (their id): enables "Logged for" to
+   *  create the entry on behalf of another member. */
+  groupOwnerId?: string;
 };
 
 function TransactionDialog({
@@ -142,6 +147,7 @@ function TransactionDialog({
   groupFund,
   groupMembers = [],
   groupGuests = [],
+  groupOwnerId,
 }: Props) {
   const router = useRouter();
   const [openState, setOpenState] = React.useState(false);
@@ -242,6 +248,12 @@ function TransactionDialog({
     })),
   ];
   const canReimburse = isGroup && groupMembers.length > 0 && mode === "full";
+  const canLogForMember =
+    isGroup && Boolean(groupOwnerId) && groupMembers.length > 1 && mode === "full";
+  const memberOptions = groupMembers.map((m) => ({
+    value: m.id,
+    label: m.name ?? "Unnamed member",
+  }));
   const defaultValues: TxnValues = {
     type: "OUTCOME",
     splitMode: "equal",
@@ -254,6 +266,7 @@ function TransactionDialog({
     payeeId: EXTERNAL,
     // Default: everyone used it.
     participantIds: groupMembers.map((m) => m.id),
+    authorId: groupOwnerId ?? "",
     at: defaults?.at ?? new Date(),
   };
 
@@ -308,6 +321,7 @@ function TransactionDialog({
         : undefined,
       splits: useCustom ? customShares : undefined,
       receiptPath: defaults?.receiptPath ?? null,
+      authorId: canLogForMember ? values.authorId || null : null,
     });
     if (!res.ok) {
       toast.warning(res.errorMessage);
@@ -377,6 +391,14 @@ function TransactionDialog({
                       name="payeeId"
                       label="Pay to"
                       options={payeeOptions}
+                    />
+                  ) : null}
+
+                  {canLogForMember && !isReimburse ? (
+                    <FormSelect<TxnValues>
+                      name="authorId"
+                      label="Logged for"
+                      options={memberOptions}
                     />
                   ) : null}
 

@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 
 import prisma from "@/lib/prisma";
 import { requireUserId } from "@/lib/auth";
+import { resolveGroupSplits, type SplitRow } from "@/lib/group-splits";
 import {
   TransactionType,
   TransactionCategory,
@@ -35,6 +36,8 @@ export interface ICreateTransactionPayload {
    *  precedence over participant ids. Must sum to `amount`. Each row targets a
    *  real member (profileId) or a temp member (guestId), not both. */
   splits?: { profileId?: string; guestId?: string; amount: number }[];
+  /** group only: owner logs this on behalf of another member (the author). */
+  authorId?: string | null;
   /** storage path of the receipt image this entry was scanned from, if any. */
   receiptPath?: string | null;
 }
@@ -65,7 +68,9 @@ export const createTransaction = async (
           : [payload.fundId];
 
       // Resolved per-member/guest shares of a group spend.
-      let splitRows: { profileId?: string; guestId?: string; amount: number }[] = [];
+      let splitRows: SplitRow[] = [];
+      // Who the entry is attributed to (the caller, unless owner logs for a member).
+      let authorId = ownerId;
 
       if (payload.groupId) {
         // Group transactions use the group's shared pool fund — verify the
@@ -88,64 +93,30 @@ export const createTransaction = async (
         });
         if (poolFunds !== fundIds.length) throw new Error("Fund not found");
 
+        // Owner may log on behalf of another member (author = that member).
+        if (payload.authorId && payload.authorId !== ownerId) {
+          if (group.ownerId !== ownerId) {
+            throw new Error("Only the group owner can log for another member");
+          }
+          const isMember =
+            payload.authorId === group.ownerId ||
+            group.Profile_groupMembers.some((m) => m.id === payload.authorId);
+          if (!isMember) throw new Error("Member is not in the group");
+          authorId = payload.authorId;
+        }
+
         // Only outcomes have "who used it"; build per-member/guest shares.
         if (payload.type === "OUTCOME") {
-          const memberIds = new Set(
-            group.Profile_groupMembers.map((m) => m.id).concat(group.ownerId),
+          splitRows = await resolveGroupSplits(
+            tx,
+            {
+              id: payload.groupId,
+              ownerId: group.ownerId,
+              memberIds: group.Profile_groupMembers.map((m) => m.id),
+            },
+            amount,
+            payload,
           );
-          // Valid temp members (guests) of this group.
-          const guestRows = await tx.groupGuest.findMany({
-            where: { groupId: payload.groupId },
-            select: { id: true },
-          });
-          const guestIds = new Set(guestRows.map((g) => g.id));
-
-          if (payload.splits && payload.splits.length > 0) {
-            // Custom amounts: validate each targets a real member or a group
-            // guest (not both) + that they sum to the total.
-            for (const s of payload.splits) {
-              if (s.profileId && s.guestId) {
-                throw new Error("Split targets a member or guest, not both");
-              }
-              if (s.profileId && !memberIds.has(s.profileId)) {
-                throw new Error("Split member is not in the group");
-              }
-              if (s.guestId && !guestIds.has(s.guestId)) {
-                throw new Error("Split guest is not in the group");
-              }
-              if (!s.profileId && !s.guestId) {
-                throw new Error("Split has no member or guest");
-              }
-              if (!(s.amount >= 0)) throw new Error("Split amount invalid");
-            }
-            const sum = payload.splits.reduce((a, s) => a + s.amount, 0);
-            if (Math.abs(sum - amount) >= 1) {
-              throw new Error("Split amounts must sum to the total");
-            }
-            splitRows = payload.splits.filter((s) => s.amount > 0);
-          } else {
-            // Equal split among the picked members + guests (default: all
-            // members, no guests).
-            const pickedMembers = (payload.participantIds ?? []).filter((pid) =>
-              memberIds.has(pid),
-            );
-            const pickedGuests = (payload.guestParticipantIds ?? []).filter(
-              (gid) => guestIds.has(gid),
-            );
-            const targets: { profileId?: string; guestId?: string }[] =
-              pickedMembers.length + pickedGuests.length > 0
-                ? [
-                    ...pickedMembers.map((profileId) => ({ profileId })),
-                    ...pickedGuests.map((guestId) => ({ guestId })),
-                  ]
-                : [...memberIds].map((profileId) => ({ profileId }));
-            const base = Math.floor(amount / targets.length);
-            const remainder = amount - base * targets.length;
-            splitRows = targets.map((t, i) => ({
-              ...t,
-              amount: base + (i === 0 ? remainder : 0),
-            }));
-          }
         }
       } else {
         // Personal transactions: the funds must belong to the user.
@@ -181,7 +152,7 @@ export const createTransaction = async (
       const created = await tx.transaction.create({
         data: {
           id: txnId,
-          authorId: ownerId,
+          authorId,
           type: payload.type,
           category:
             isOutcome && payload.category ? payload.category : "NULL",

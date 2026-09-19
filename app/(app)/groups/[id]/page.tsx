@@ -127,6 +127,11 @@ export default async function GroupDetailPage({
             groupFund={pool}
             groupMembers={members}
             groupGuests={openGuests}
+            groupOwnerId={
+              group.isOwner
+                ? group.members.find((m) => m.isOwner)?.id
+                : undefined
+            }
             title="New group transaction"
             trigger={
               <Button size="sm">
@@ -174,7 +179,11 @@ export default async function GroupDetailPage({
           isOwner={group.isOwner}
         />
 
-        <GroupFeed items={group.transactions} />
+        <GroupFeed
+          items={group.transactions}
+          members={members}
+          guests={openGuests}
+        />
       </main>
     </>
   );

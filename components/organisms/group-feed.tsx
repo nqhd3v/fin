@@ -5,6 +5,7 @@ import {
 } from "@phosphor-icons/react/dist/ssr";
 
 import { ReceiptLink } from "@/components/molecules/receipt-link";
+import { GroupSplitDialog } from "@/components/organisms/group-split-dialog";
 import { formatCurrency, formatDayLabel } from "@/lib/format";
 import type { IGroupTransaction } from "@/handlers/groups";
 
@@ -28,7 +29,16 @@ function rowMeta(t: IGroupTransaction) {
   return { Icon: ArrowUp, sign: "−", accent: "text-muted-foreground" };
 }
 
-function GroupFeed({ items }: { items: IGroupTransaction[] }) {
+function GroupFeed({
+  items,
+  members,
+  guests,
+}: {
+  items: IGroupTransaction[];
+  members: { id: string; name: string | null }[];
+  /** unclaimed temp members, selectable when editing "used by" */
+  guests: { id: string; name: string }[];
+}) {
   const groups = groupByDay(items);
 
   return (
@@ -91,6 +101,13 @@ function GroupFeed({ items }: { items: IGroupTransaction[] }) {
                       </p>
                     </div>
                     {t.receiptPath ? <ReceiptLink path={t.receiptPath} /> : null}
+                    {t.canEditSplits ? (
+                      <GroupSplitDialog
+                        transaction={t}
+                        members={members}
+                        guests={guests}
+                      />
+                    ) : null}
                     <span className={"shrink-0 text-xs tabular-nums " + accent}>
                       {sign}
                       {formatCurrency(t.amount)}
